@@ -3,86 +3,121 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
-using TMPro;
 using System.Linq;
+using DG.Tweening;
+using System.Threading.Tasks;
 
 public class GameControl : MonoBehaviour
-{
-    [SerializeField] private Button restartButton;
+{    
     [SerializeField] private Camera mainCam;
-    [SerializeField] private TextMeshProUGUI texter;
-        
-    private RaycastHit2D hit;
+    
     private Touch currentTouch;
+    private Ray ray;
+    private RaycastHit hitRay;
+    private RaycastHit2D hitRay2D;
+
+    [SerializeField] private Text ttt;
 
     private ObjectPooling panels_pool;
 
     private float coolDown = 0;
-    private bool isBlockTouching = true;
-    public const float DEF_COOLDOWN = 0.5f;
-    public const float DEF_LENGHT = 80;
+    private bool isBlockTouching = false;
+    public const float DEF_COOLDOWN = 0.4f;
+    public const int DEF_SIZE = 1;
 
-    private float starting_x = -200;
-    private float starting_y = 250;
-    private int row_length = 6;
+    private int starting_x = -2;
+    private int starting_y = 2;
+    private int row_length = 5;
 
-    private readonly HashSet<string> tagsForSimplePanels = new HashSet<string>() { "panel1", "panel2", "panel3", "panel4", "panel5" };
-    private Dictionary<Vector2, Panel> panels = new Dictionary<Vector2, Panel>();
+    private Dictionary<GameObject, Panel> panels = new Dictionary<GameObject, Panel>();
 
     // Start is called before the first frame update
     void Start()
     {
         panels_pool = new ObjectPooling(100, GameObject.Find("All panels").transform);
-
-        float x = starting_x;
-        float y = starting_y;
-        int index = row_length;
-
-        for (int i = 0; i < index; i++)
+                
+        for (int x = starting_x; x < (starting_x + row_length); x+= DEF_SIZE)
         {
-            for (int ii = 0; ii < index; ii++)
+            for (int y = starting_y; y > (starting_y - row_length); y-= DEF_SIZE)
             {
-                GameObject p = panels_pool.GetObject();                
-                Panel cur_Panel = p.GetComponent<Panel>();
-                cur_Panel.SetPosition(new Vector2(x, y));
-                panels.Add(new Vector2(x, y), cur_Panel);
-                p.SetActive(true);
-                x += DEF_LENGHT;
+                AddPanel(new Vector3(x, y, 0));                
             }
-
-            x = -200;
-            y -= DEF_LENGHT;
         }
 
         CheckPanels();
-
-
-        restartButton.onClick.AddListener(() =>
-        {
-            SceneManager.LoadScene("SampleScene");
-        });
     }
 
         // Update is called once per frame
     void Update()
-    {        
+    {
+    
         if (coolDown > DEF_COOLDOWN && !isBlockTouching)
         {
-            hit = Physics2D.Raycast(Input.mousePosition, Vector2.zero);
-
-            if ((Input.touchCount > 0 || Input.GetMouseButtonDown(0)) && hit.collider != null)
+            /*
+            if (Input.GetMouseButtonDown(0))
             {
-                currentTouch = Input.GetTouch(0);
+                ray = mainCam.ScreenPointToRay(Input.mousePosition);
 
-                if (currentTouch.phase == TouchPhase.Moved)
+                if (Physics.Raycast(ray, out hitRay))
                 {
-                    texter.text = currentTouch.deltaPosition.ToString();
-                    Panel p = hit.collider.GetComponent<Panel>();
-                    if (Mathf.Abs(currentTouch.deltaPosition.x) > Mathf.Abs(currentTouch.deltaPosition.y)) //left right
+                    print(hitRay.collider.gameObject.name + " !!!!!");
+
+                    
+                }
+            }
+            */
+
+            
+
+            if (Input.touchCount > 0 || Input.GetMouseButtonDown(0))
+            {
+                Vector3 mousePosition = mainCam.ScreenToWorldPoint(Input.mousePosition);
+                Collider2D hit = Physics2D.OverlapPoint(mousePosition);
+                
+
+                
+
+
+                if (hit != null)
+                {
+                    if (hit.name == "restart")
                     {
-                        //
+                        isBlockTouching = true;
+                        SceneManager.LoadScene("SampleScene");
+                    }
+
+                    currentTouch = Input.GetTouch(0);
+
+                    if (currentTouch.phase == TouchPhase.Moved)
+                    {
+                    ttt.text = currentTouch.deltaPosition.ToString();
+
+                    if (Mathf.Abs(currentTouch.deltaPosition.x) > Mathf.Abs(currentTouch.deltaPosition.y)) //left right
+                        {
+                            if (currentTouch.deltaPosition.x > 0) //right
+                            {
+                                MovePanelRight(hit.gameObject);
+                            }
+                            else //left
+                            {
+                                MovePanelLeft(hit.gameObject);
+                            }
+                        }
+                        else
+                        {
+                            if (currentTouch.deltaPosition.y > 0) //up
+                            {
+                                MovePanelDown(hit.gameObject);
+                            }
+                            else //down
+                            {
+                                MovePanelUp(hit.gameObject);
+                            }
+                        }
                     }
                 }
+
+                
             }
         }
         else
@@ -91,269 +126,291 @@ public class GameControl : MonoBehaviour
         }
     }
 
+
+    private void AddPanel(Vector3 position)
+    {        
+        GameObject go = panels_pool.GetObject();
+        go.transform.position = position;
+        go.SetActive(true);
+        panels.Add(go, go.GetComponent<Panel>());
+    }
+
+    private void RemovePanel(List<GameObject> panelsToDel)
+    {        
+        for (int i = 0; i < panelsToDel.Count; i++)
+        {            
+            if (panelsToDel[i] == null) continue;
+            panels.Remove(panelsToDel[i]);
+            StartCoroutine(panelsToDel[i].GetComponent<Panel>().PlayDestroyEffect());
+            panels_pool.ReturnObject(panelsToDel[i]);
+        }
+    }
+
+    private void MovePanelLeft(GameObject _panel)
+    {
+        GameObject _secondPanel = WhatGameObjectInPosition(new Vector3(_panel.transform.position.x - DEF_SIZE, _panel.transform.position.y, 0));
+
+        if (_secondPanel == null)
+        {
+            return;
+        }
+
+        Vector3 panelPos = _panel.transform.position;
+        _panel.transform.DOMove(_secondPanel.transform.position, DEF_COOLDOWN);
+        _secondPanel.transform.DOMove(panelPos, DEF_COOLDOWN);
+
+        coolDown = 0;
+        StartCoroutine(CheckPanelsAfterMove());
+    }
+
+    private void MovePanelRight(GameObject _panel)
+    {
+        GameObject _secondPanel = WhatGameObjectInPosition(new Vector3(_panel.transform.position.x + DEF_SIZE, _panel.transform.position.y, 0));
+
+        if (_secondPanel == null)
+        {
+            return;
+        }
+
+        Vector3 panelPos = _panel.transform.position;
+        _panel.transform.DOMove(_secondPanel.transform.position, DEF_COOLDOWN);
+        _secondPanel.transform.DOMove(panelPos, DEF_COOLDOWN);
+
+        coolDown = 0;
+        StartCoroutine(CheckPanelsAfterMove());
+    }
+
+    private void MovePanelUp(GameObject _panel)
+    {
+        GameObject _secondPanel = WhatGameObjectInPosition(new Vector3(_panel.transform.position.x, _panel.transform.position.y- DEF_SIZE, 0));
+
+        if (_secondPanel == null)
+        {
+            return;
+        }
+
+        Vector3 panelPos = _panel.transform.position;
+        _panel.transform.DOMove(_secondPanel.transform.position, DEF_COOLDOWN);
+        _secondPanel.transform.DOMove(panelPos, DEF_COOLDOWN);
+
+        coolDown = 0;
+        StartCoroutine(CheckPanelsAfterMove());
+    }
+
+    private void MovePanelDown(GameObject _panel)
+    {
+        GameObject _secondPanel = WhatGameObjectInPosition(new Vector3(_panel.transform.position.x, _panel.transform.position.y + DEF_SIZE, 0));
+
+        if (_secondPanel == null)
+        {
+            return;
+        }
+
+        Vector3 panelPos = _panel.transform.position;
+        _panel.transform.DOMove(_secondPanel.transform.position, DEF_COOLDOWN);
+        _secondPanel.transform.DOMove(panelPos, DEF_COOLDOWN);
+
+        coolDown = 0;
+        StartCoroutine(CheckPanelsAfterMove());
+    }
+
+    private GameObject WhatGameObjectInPosition(Vector3 position)
+    {
+        GameObject result = null;
+
+        foreach (GameObject items in panels.Keys)
+        {
+            if (items.transform.position == position) return items;
+        }
+
+        return result;
+    }
+
+    private Panel WhatPanelInPosition(Vector3 position)
+    {
+        Panel result = null;
+
+        foreach (GameObject items in panels.Keys)
+        {
+            if (items.transform.position == position) return items.GetComponent<Panel>();
+        }
+
+        return result;
+    }
+
+    private IEnumerator CheckPanelsAfterMove()
+    {
+        yield return new WaitForSeconds(0.5f);
+        CheckPanels();
+    }
+
+
     private void CheckPanels()
     {
-        
+        List<GameObject> candidates = new List<GameObject>();
+        bool isFound = false;
 
-        try
+        for (int y = starting_y; y > (starting_y - row_length); y-= DEF_SIZE) 
         {
-            List<Vector2> candidates = new List<Vector2>();
-            bool isFound = false;
-
-            for (float y = starting_y; y > (starting_y - DEF_LENGHT * row_length); y -= DEF_LENGHT)
+            int match = 1;
+            for (int x = starting_x; x < (starting_x + row_length); x+= DEF_SIZE)
             {
-                int match = 1;
-                for (float x = starting_x; x < (starting_x + DEF_LENGHT * row_length); x += DEF_LENGHT)
+                if (WhatPanelInPosition(new Vector3(x, y, 0))!=null && WhatPanelInPosition(new Vector3(x- DEF_SIZE, y, 0))!=null && WhatPanelInPosition(new Vector3(x, y, 0)).CurrentType == WhatPanelInPosition(new Vector3(x- DEF_SIZE, y, 0)).CurrentType)
                 {
-                    //print(x +" - " + y);
-
-                    if (panels.ContainsKey(new Vector2(x - DEF_LENGHT, y)) && panels[new Vector2(x, y)].CurrentType == panels[new Vector2(x - DEF_LENGHT, y)].CurrentType)
-                    {
-                        match++;
-                        if (match == 2) candidates.Add(new Vector2(x - DEF_LENGHT, y));
-                        candidates.Add(new Vector2(x, y));
-
-                        //print(match + " : " + new Vector2(x, y));
-                    }
-                    else
-                    {
-                        if (match >= 3)
-                        {
-                            isFound = true;
-                            break;
-                        }
-                        else
-                        {
-                            match = 1;
-                            candidates.Clear();
-                        }
-                    }
-                }
-
-                if (match >= 3)
-                {
-                    isFound = true;
-                    break;
+                    match++;
+                    if (match == 2) candidates.Add(WhatGameObjectInPosition(new Vector3(x - DEF_SIZE, y, 0)));
+                    candidates.Add(WhatGameObjectInPosition(new Vector3(x, y, 0)));                    
                 }
                 else
                 {
+                    if (match>=3)
+                    {
+                        RemovePanel(candidates);                       
+                        isFound = true;
+                    }
+                    
+                    match = 1;
                     candidates.Clear();
                 }
             }
 
-            /*
-            for (int i = 0; i < candidates.Count; i++)
+            if (match >= 3)
             {
-                print(candidates[i]);
-            }
-            */
-
-            if (isFound)
-            {
-                StartCoroutine(DestroyMatchPanels(candidates));
-                isBlockTouching = true;
-                return;
+                RemovePanel(candidates);
+                isFound = true;
             }
 
-            //vertical
+            match = 1;
+            candidates.Clear();           
+
+        }
+
+        if (isFound)
+        {
+            isBlockTouching = true;
+            StartCoroutine(Relocation());
+            return;
+        }
+
+        //vertical
+        for (int x = starting_x; x < (starting_x + row_length); x+= DEF_SIZE) 
+        {
+            int match = 1;
+            for (int y = starting_y; y > (starting_y - row_length); y-= DEF_SIZE)
+            {
+                if (WhatPanelInPosition(new Vector3(x, y, 0))!=null && WhatPanelInPosition(new Vector3(x, y+ DEF_SIZE, 0)) && WhatPanelInPosition(new Vector3(x, y, 0)).CurrentType == WhatPanelInPosition(new Vector3(x, y+ DEF_SIZE, 0)).CurrentType)
+                {
+                    match++;
+                    if (match == 2) candidates.Add(WhatGameObjectInPosition(new Vector3(x, y+ DEF_SIZE, 0)));
+                    candidates.Add(WhatGameObjectInPosition(new Vector3(x, y, 0)));
+                }
+                else
+                {
+                    if (match >= 3)
+                    {
+                        RemovePanel(candidates);
+                        isFound = true;
+                    }
+
+                    match = 1;
+                    candidates.Clear();
+                }
+            }
+
+            if (match >= 3)
+            {
+                RemovePanel(candidates);
+                isFound = true;
+            }
+
+            match = 1;
             candidates.Clear();
-            isFound = false;
 
-            for (float x = starting_x; x < (starting_x + DEF_LENGHT * row_length); x += DEF_LENGHT)
+        }
+
+        if (isFound)
+        {
+            isBlockTouching = true;
+            StartCoroutine(Relocation());
+            return;
+        }
+                
+        isBlockTouching = false;
+        
+    }
+
+
+    private IEnumerator Relocation()
+    {       
+        yield return new WaitForSeconds(Panel.DESTROY_SPEED);
+        
+
+        do
+        {
+            for (int x = starting_x; x < (starting_x + row_length); x+= DEF_SIZE)
             {
-                int match = 1;
-                for (float y = starting_y; y > (starting_y - DEF_LENGHT * row_length); y -= DEF_LENGHT)
+                if (WhatGameObjectInPosition(new Vector3(x, starting_y, 0)) == null)
                 {
-                    //print(x +" - " + y);
+                    AddPanel(new Vector3(x, starting_y, 0));
+                }
+            }
 
-                    if (panels.ContainsKey(new Vector2(x, y + DEF_LENGHT)) && panels[new Vector2(x, y)].CurrentType == panels[new Vector2(x, y + DEF_LENGHT)].CurrentType)
+            HashSet<GameObject> PanelsToMove = new HashSet<GameObject>();
+            
+            for (int x = starting_x; x < (starting_x + row_length); x+= DEF_SIZE)
+            {
+                for (int y = starting_y; y > (starting_y - row_length); y-= DEF_SIZE)
+                {
+                    if (WhatGameObjectInPosition(new Vector3(x, y, 0)) == null)
                     {
-                        match++;
-                        if (match == 2) candidates.Add(new Vector2(x, y + DEF_LENGHT));
-                        candidates.Add(new Vector2(x, y));
+                        for (int i = starting_y; i > y; i-= DEF_SIZE)
+                        {
+                            if (WhatGameObjectInPosition(new Vector3(x, i, 0)) != null)
+                            {
+                                PanelsToMove.Add(WhatGameObjectInPosition(new Vector3(x, i, 0)));
+                            }                            
+                        }
+                                                
+                    }
+                }
+            }
 
-                        //print(match + " : " + new Vector2(x, y));
+
+            if (PanelsToMove.Count > 0)
+            {
+                foreach (GameObject item in PanelsToMove)
+                {
+                    item.transform.DOMove(new Vector3(item.transform.position.x, item.transform.position.y - DEF_SIZE, 0), Panel.MOVE_SPEED);
+                }
+
+                yield return new WaitForSeconds(0.5f);
+
+
+            }
+            else break;
+        }
+        while (true);
+
+        Dictionary<int, int> SpawnNewPanels = new Dictionary<int, int>();
+        for (int x = starting_x; x < (starting_x + row_length); x+= DEF_SIZE)
+        {
+            for (int y = starting_y; y > (starting_y - row_length); y-= DEF_SIZE)
+            {
+                if (WhatGameObjectInPosition(new Vector3(x, y, 0)) == null)
+                {                    
+                    if (!SpawnNewPanels.ContainsKey(x))
+                    {
+                        SpawnNewPanels.Add(x, 1);
                     }
                     else
                     {
-                        if (match >= 3)
-                        {
-                            isFound = true;
-                            break;
-                        }
-                        else
-                        {
-                            match = 1;
-                            candidates.Clear();
-                        }
+                        SpawnNewPanels[x]++;
                     }
                 }
-
-                if (match >= 3)
-                {
-                    isFound = true;
-                    break;
-                }
-                else
-                {
-                    candidates.Clear();
-                }
-            }
-
-
-            if (isFound)
-            {
-                StartCoroutine(DestroyMatchPanels(candidates));
-                isBlockTouching = true;
-                return;
-            }
-
-            isBlockTouching = false;
-        }
-        catch (System.Exception ex)
-        {
-            print("error" + ex);
-
-            
-        }
-                
-    }
-
-    IEnumerator DestroyMatchPanels(List<Vector2> candidates)
-    {
-     
-        if (candidates.Count>5)
-        {
-          
-            for (int i = 0; i < (candidates.Count - 5); i++)
-            {
-                candidates.Remove(candidates[i + 5]);
-            }
-        }
-
-        for (int i = 0; i < candidates.Count; i++)
-        {
-            StartCoroutine(panels[candidates[i]].DetonateMatch());            
-        }
-
-        yield return new WaitForSeconds(Panel.MOVE_SPEED);
-
-        for (int i = 0; i < candidates.Count; i++)
-        {            
-            panels_pool.ReturnObject(panels[candidates[i]].gameObject);
-            panels[candidates[i]] = null;
-        }
-
-        StartCoroutine(RenewMatchPanels(candidates));
-    }
-
-    IEnumerator RenewMatchPanels(List<Vector2> candidates)
-    {
-     
-        //if vertical positions
-        HashSet<float> x_variants = new HashSet<float>();
-        HashSet<float> y_variants = new HashSet<float>();
-        int vertPosRows = 0;
-        for (int i = 0; i < candidates.Count; i++)
-        {
-            if (!x_variants.Contains(candidates[i].x))
-            {
-                x_variants.Add(candidates[i].x);
-            }
-
-            if (!y_variants.Contains(candidates[i].y))
-            {
-                y_variants.Add(candidates[i].y);
-            }
-        }
-
-        vertPosRows = y_variants.Count;
-
-
-        foreach (Vector2 items in panels.Keys)
-        {
-            if (x_variants.Contains(items.x) && items.y> y_variants.Max() && panels[items] != null)
-            {
-                panels[items].MoveDown(vertPosRows);
-                
-            }
-        }
-
-        yield return new WaitForSeconds(Panel.MOVE_SPEED);
-
-        foreach (float x_coord in x_variants)
-        {
-            for (float y = starting_y; y > (starting_y - vertPosRows * DEF_LENGHT); y-=DEF_LENGHT)
-            {
-                GameObject p = panels_pool.GetObject();
-                Panel cur_Panel = p.GetComponent<Panel>();
-                cur_Panel.SetPosition(new Vector2(x_coord, y));
-                
-                p.SetActive(true);
-            }
-        }
-
-        ReArrange();
-     
-    }
-
-
-    private void ReArrange()
-    {
-        Dictionary<Vector2, Panel> newData = new Dictionary<Vector2, Panel>();
-
-        /*
-        foreach (Vector2 item in panels.Keys)
-        {
-            for (int i = 0; i < GameObject.Find("All panels").transform.childCount; i++)
-            {
-                if (GameObject.Find("All panels").transform.GetChild(i).gameObject.activeSelf)
-                {
-                    Panel p = GameObject.Find("All panels").transform.GetChild(i).GetComponent<Panel>();
-                    if (p.GetPosition() == item)
-                    {
-                        newData.Add(item, p);
-                        break;
-                    }
-                }
-            }
-        }
-        */
-
-        for (int i = 0; i < GameObject.Find("All panels").transform.childCount; i++)
-        {
-            if (GameObject.Find("All panels").transform.GetChild(i).gameObject.activeSelf)
-            {
-                Panel p = GameObject.Find("All panels").transform.GetChild(i).GetComponent<Panel>();
-                newData.Add(new Vector2(Mathf.Round(GameObject.Find("All panels").transform.GetChild(i).GetComponent<RectTransform>().anchoredPosition3D.x), Mathf.Round(GameObject.Find("All panels").transform.GetChild(i).GetComponent<RectTransform>().anchoredPosition3D.y)), p);
-            }
-        }
-
-
-        panels = newData;
-        
-
-        foreach (Vector2 item in panels.Keys)
-        {
-            if (panels[item] != null)
-            {
-                Vector2 v = new Vector2((int)panels[item].GetComponent<RectTransform>().anchoredPosition3D.x, (int)panels[item].GetComponent<RectTransform>().anchoredPosition3D.y);
-
-                if (v != item)
-                {
-                    //print("errr1: " + item + " = " + v);
-                    //ReArrange();
-                }
-            }
-            else
-            {
-                //print("errr2: " + item);
-                //ReArrange();
             }
         }
 
         CheckPanels();
-
     }
 
 

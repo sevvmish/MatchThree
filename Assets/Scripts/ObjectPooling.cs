@@ -37,8 +37,7 @@ public class ObjectPooling : MonoBehaviour
         {
             int panel_number = Random.Range(1, 6);
             GameObject _object = Instantiate(GetPanelByNumber(panel_number), Storage);
-            _object.SetActive(false);
-            //_object.GetComponent<Panel>().CurrentType = (PanelTypes)panel_number;            
+            _object.SetActive(false);            
             poolOfObjects.Enqueue(_object);
         }
     }
@@ -109,7 +108,7 @@ public class ObjectPooling : MonoBehaviour
 
     public void ReturnObject(GameObject _object)
     {
-        _object.SetActive(false);
+        //_object.SetActive(false);
         poolOfObjects.Enqueue(_object);
     }
 
