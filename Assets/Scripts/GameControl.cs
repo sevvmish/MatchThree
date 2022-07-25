@@ -11,14 +11,12 @@ public class GameControl : MonoBehaviour
 {    
     [SerializeField] private Camera mainCam;
     
-    private Touch currentTouch;
-    private Ray ray;
-    private RaycastHit hitRay;
-    private RaycastHit2D hitRay2D;
-
-    [SerializeField] private Text ttt;
-
+    
+    private Collider2D collider2D;
+    private Vector3 oldMousePos, currMousePos, deltaMousePos;
+        
     private ObjectPooling panels_pool;
+    private GameObject currentGameObjectPanel;
 
     private float coolDown = 0;
     private bool isBlockTouching = false;
@@ -53,76 +51,79 @@ public class GameControl : MonoBehaviour
     
         if (coolDown > DEF_COOLDOWN && !isBlockTouching)
         {
-            /*
-            if (Input.GetMouseButtonDown(0))
-            {
-                ray = mainCam.ScreenPointToRay(Input.mousePosition);
-
-                if (Physics.Raycast(ray, out hitRay))
-                {
-                    print(hitRay.collider.gameObject.name + " !!!!!");
-
-                    
-                }
-            }
-            */
-
             
+            currMousePos = mainCam.ScreenToWorldPoint(Input.mousePosition);
+            collider2D = Physics2D.OverlapPoint(currMousePos);
 
-            if (Input.touchCount > 0 || Input.GetMouseButtonDown(0))
+            if (collider2D != null)
             {
-                Vector3 mousePosition = mainCam.ScreenToWorldPoint(Input.mousePosition);
-                Collider2D hit = Physics2D.OverlapPoint(mousePosition);
                 
 
-                
-
-
-                if (hit != null)
+                if (Input.GetMouseButtonDown(0))
                 {
-                    if (hit.name == "restart")
+                    if (collider2D.name == "restart")
                     {
-                        isBlockTouching = true;
+                        isBlockTouching = false;
                         SceneManager.LoadScene("SampleScene");
                     }
 
-                    currentTouch = Input.GetTouch(0);
-
-                    if (currentTouch.phase == TouchPhase.Moved)
-                    {
-                    ttt.text = currentTouch.deltaPosition.ToString();
-
-                    if (Mathf.Abs(currentTouch.deltaPosition.x) > Mathf.Abs(currentTouch.deltaPosition.y)) //left right
-                        {
-                            if (currentTouch.deltaPosition.x > 0) //right
-                            {
-                                MovePanelRight(hit.gameObject);
-                            }
-                            else //left
-                            {
-                                MovePanelLeft(hit.gameObject);
-                            }
-                        }
-                        else
-                        {
-                            if (currentTouch.deltaPosition.y > 0) //up
-                            {
-                                MovePanelDown(hit.gameObject);
-                            }
-                            else //down
-                            {
-                                MovePanelUp(hit.gameObject);
-                            }
-                        }
-                    }
+                    currentGameObjectPanel = collider2D.gameObject;
+                    oldMousePos = currMousePos;                    
+                    deltaMousePos = Vector3.zero;
+                    return;
+                } 
+                                
+                
+                if (currentGameObjectPanel == collider2D.gameObject)
+                {
+                    deltaMousePos = currMousePos - oldMousePos;
+                    oldMousePos = currMousePos;                    
+                }
+                else
+                {
+                    currMousePos = Vector3.zero;
+                    deltaMousePos = Vector3.zero;
+                    oldMousePos = Vector3.zero;
                 }
 
-                
+
+                if (Mathf.Abs(deltaMousePos.x) > 0 || Mathf.Abs(deltaMousePos.y) > 0)
+                {
+                    
+
+                    if (Mathf.Abs(deltaMousePos.x) > Mathf.Abs(deltaMousePos.y)) //left right
+                    {
+                        if (deltaMousePos.x > 0) //right
+                        {
+                            MovePanelRight(currentGameObjectPanel);
+                        }
+                        else //left
+                        {
+                            MovePanelLeft(currentGameObjectPanel);
+                        }
+                    }
+                    else
+                    {
+                        if (deltaMousePos.y > 0) //up
+                        {
+                            MovePanelDown(currentGameObjectPanel);
+                        }
+                        else //down
+                        {
+                            MovePanelUp(currentGameObjectPanel);
+                        }
+                    }
+
+                    currentGameObjectPanel = null;
+                }
+
             }
+
         }
         else
         {
-            coolDown += Time.deltaTime;
+            coolDown += Time.deltaTime;            
+            oldMousePos = Vector3.one * 999;
         }
     }
 
